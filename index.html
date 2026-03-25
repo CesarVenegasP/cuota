@@ -96,6 +96,12 @@
   .section-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
   .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 8px 18px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200; white-space: nowrap; }
   .toast.show { opacity: 1; }
+  .pago-menu { position: fixed; background: var(--bg-primary); border-radius: var(--radius-lg); border: 0.5px solid var(--border-med); box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 300; min-width: 160px; overflow: hidden; }
+  .pago-menu-item { padding: 12px 16px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .pago-menu-item:active { background: var(--bg-secondary); }
+  .pago-menu-item.op-pagado { color: var(--success); }
+  .pago-menu-item.op-pendiente { color: var(--danger); }
+  .pago-overlay { position: fixed; inset: 0; z-index: 299; }
 </style>
 </head>
 <body>
@@ -229,6 +235,8 @@ function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(st
 let state = loadState();
 let editingPid = null;
 let editingGid = null;
+let _idCounter = Date.now();
+function genId(){ return ++_idCounter; }
 
 function fmt(n){ return '$' + Math.round(n).toLocaleString('es-AR'); }
 function initials(name){ return name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
@@ -314,7 +322,7 @@ function guardarParticipante() {
     p.nombre = nombre; p.grupo = grupo;
     showToast('Participante actualizado ✓');
   } else {
-    state.participantes.push({ id: Date.now(), nombre, grupo });
+    state.participantes.push({ id: genId(), nombre, grupo });
     showToast('Participante guardado ✓');
   }
   saveState();
@@ -331,10 +339,35 @@ function eliminarParticipante(pid) {
   render();
 }
 
-function togglePago(pid) {
+function abrirMenuPago(e, pid) {
+  cerrarMenuPago();
+  const rect = e.target.getBoundingClientRect();
+  const overlay = document.createElement('div');
+  overlay.className = 'pago-overlay';
+  overlay.onclick = cerrarMenuPago;
+  const menu = document.createElement('div');
+  menu.className = 'pago-menu';
+  menu.id = 'pago-menu-active';
+  const top = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 170);
+  menu.style.cssText = `top:${top}px;left:${left}px;`;
+  menu.innerHTML = `
+    <div class="pago-menu-item op-pagado" onclick="setPago(${pid}, true)">✓ Pagado</div>
+    <div class="pago-menu-item op-pendiente" onclick="setPago(${pid}, false)">○ Pendiente</div>`;
+  document.body.appendChild(overlay);
+  document.body.appendChild(menu);
+}
+
+function cerrarMenuPago() {
+  document.getElementById('pago-menu-active')?.remove();
+  document.querySelector('.pago-overlay')?.remove();
+}
+
+function setPago(pid, pagado) {
   const key = pid + '_' + state.mesActivo;
-  state.pagos[key] = !state.pagos[key];
+  state.pagos[key] = pagado;
   saveState();
+  cerrarMenuPago();
   render();
 }
 
@@ -367,7 +400,7 @@ function guardarGasto() {
     g.desc=desc; g.cat=cat; g.monto=monto; g.fecha=fecha;
     showToast('Gasto actualizado ✓');
   } else {
-    state.gastos.push({ id: Date.now(), desc, cat, monto, fecha });
+    state.gastos.push({ id: genId(), desc, cat, monto, fecha });
     showToast('Gasto guardado ✓');
   }
   saveState();
@@ -428,7 +461,7 @@ function render() {
             <div class="p-grupo">Grupo ${p.grupo} · ${nombreGrupo} · ${fmt(monto)}/mes</div>
           </div>
           <div class="p-actions">
-            <span class="badge ${pagado?'pagado':'pendiente'}" onclick="togglePago(${p.id})">${pagado?'✓ Pagado':'Pendiente'}</span>
+            <span class="badge ${pagado?'pagado':'pendiente'}" onclick="abrirMenuPago(event, ${p.id})">${pagado?'✓ Pagado':'Pendiente'}</span>
             <div style="display:flex;gap:4px;">
               <button class="btn-edit" onclick="abrirModalParticipante(${p.id})">Editar</button>
               <button class="btn-danger" onclick="eliminarParticipante(${p.id})">Eliminar</button>
